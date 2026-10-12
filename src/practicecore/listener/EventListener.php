@@ -327,7 +327,7 @@ class EventListener implements Listener{
 			$distSq = $dx * $dx + $dz * $dz;
 			$now = microtime(true);
 
-			if($p->isSprinting() and ($now - $s->lastForward) < 0.05 and $distSq > 0.01){
+			if($p->isSprinting() and ($now - $s->lastForward) < 0.10 and $distSq > 0.01){
 				$s->lastForward = $now;
 			}elseif($distSq > 0.000001){
 				$len = sqrt($distSq);
