@@ -118,7 +118,11 @@ class Utils{
 	}
 
 	public static function stripColors($text){
-		return preg_replace('/\xc2\xa7./', '', (string) $text);
+		$text = (string) $text;
+		if(strpos($text, "\xc2\xa7") === false){
+			return $text;
+		}
+		return preg_replace('/\xc2\xa7./', '', $text);
 	}
 
 	public static function parseTime($s){

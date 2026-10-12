@@ -324,13 +324,22 @@ class EventListener implements Listener{
 		if($moved and !empty($s->settings["auto-sprint"]) and $s->state !== Session::FFA_DEAD and $s->state !== Session::MEETUP_DEAD){
 			$dx = $to->x - $from->x;
 			$dz = $to->z - $from->z;
-			$len = sqrt($dx * $dx + $dz * $dz);
-			$rad = deg2rad($to->yaw);
-			$forward = ($len > 0.0001) && ((($dx * -sin($rad)) + ($dz * cos($rad))) / $len > 0.35);
-			if($forward){
-				$s->lastForward = microtime(true);
-				if(!$p->isSprinting()){
-					$p->setSprinting(true);
+			$distSq = $dx * $dx + $dz * $dz;
+			$now = microtime(true);
+
+			if($p->isSprinting() and ($now - $s->lastForward) < 0.05 and $distSq > 0.01){
+				$s->lastForward = $now;
+			}elseif($distSq > 0.000001){
+				$len = sqrt($distSq);
+				$rad = $to->yaw * 0.017453292519943;
+				$forward = ((($dx * -sin($rad)) + ($dz * cos($rad))) / $len > 0.35);
+				if($forward){
+					$s->lastForward = $now;
+					if(!$p->isSprinting()){
+						$p->setSprinting(true);
+					}
+				}elseif($p->isSprinting()){
+					$p->setSprinting(false);
 				}
 			}elseif($p->isSprinting()){
 				$p->setSprinting(false);

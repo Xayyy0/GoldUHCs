@@ -9,12 +9,14 @@ class StatsManager{
 	private $plugin;
 
 	private $index = [];
+	private $sortedCache = [];
 
 	public function __construct(PracticeCore $plugin){
 		$this->plugin = $plugin;
 	}
 
 	public function buildIndex(){
+		$this->sortedCache = [];
 		$files = glob($this->plugin->sessions->dir() . "*.yml");
 		if(!is_array($files) or !function_exists("yaml_parse_file")){
 			return;
@@ -36,6 +38,7 @@ class StatsManager{
 	}
 
 	public function touch(Session $s){
+		$this->sortedCache = [];
 		$this->index[strtolower($s->name)] = ["name" => $s->name, "elo" => $s->elo, "kills" => $s->kills, "deaths" => $s->deaths, "meetupWins" => $s->meetupWins];
 	}
 
@@ -104,6 +107,9 @@ class StatsManager{
 	}
 
 	private function sorted($type){
+		if(isset($this->sortedCache[$type])){
+			return $this->sortedCache[$type];
+		}
 		$rows = array_values($this->index);
 		usort($rows, function($a, $b) use ($type){
 			if($a[$type] === $b[$type]){
@@ -111,6 +117,7 @@ class StatsManager{
 			}
 			return $b[$type] <=> $a[$type];
 		});
+		$this->sortedCache[$type] = $rows;
 		return $rows;
 	}
 
