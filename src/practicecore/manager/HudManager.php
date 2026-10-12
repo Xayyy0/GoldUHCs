@@ -52,7 +52,7 @@ class HudManager{
 			}elseif($this->counter % $every === 0){
 				$tip = $this->build($p, $s);
 
-				if($tip !== null and ($tip !== $s->hudLastTip or $now - $s->hudLastSent >= 2.0)){
+				if($tip !== null and ($tip !== $s->hudLastTip or $now - $s->hudLastSent >= 4.0)){
 					$s->hudLastTip = $tip;
 					$s->hudLastSent = $now;
 					$p->sendTip($tip);
@@ -105,13 +105,15 @@ class HudManager{
 		if($has("registered")) $v["registered"] = $meetup->registeredCount();
 		if($has("date")) $v["date"] = date("d/m/y");
 		if($has("coins")) $v["coins"] = $this->coins($p);
-		$v["mode"] = $s->queueMode !== null ? $this->modeDisplay($s->queueMode) : "-";
-		$v["opponent"] = "-";
-		$v["ranked"] = "-";
-		if($s->match !== null){
-			$v["opponent"] = $s->match->opponentOf($s->name);
-			$v["ranked"] = $s->match->ranked ? "Ranked" : "Unranked";
-			$v["mode"] = $this->modeDisplay($s->match->mode);
+		if($has("mode") or $has("opponent") or $has("ranked")){
+			$v["mode"] = $s->queueMode !== null ? $this->modeDisplay($s->queueMode) : "-";
+			$v["opponent"] = "-";
+			$v["ranked"] = "-";
+			if($s->match !== null){
+				$v["opponent"] = $s->match->opponentOf($s->name);
+				$v["ranked"] = $s->match->ranked ? "Ranked" : "Unranked";
+				$v["mode"] = $this->modeDisplay($s->match->mode);
+			}
 		}
 		return $v;
 	}
@@ -153,16 +155,20 @@ class HudManager{
 	private function align($text){
 		$lines = explode("\n", $text);
 		$max = 0;
-		foreach($lines as $l){
+		$lengths = [];
+		foreach($lines as $i => $l){
 			$plain = Utils::stripColors($l);
+			$len = strlen($plain);
 			if(trim($plain) !== ""){
-				$max = max($max, strlen($plain));
+				$lengths[$i] = $len;
+				if($len > $max){
+					$max = $len;
+				}
 			}
 		}
 		foreach($lines as $i => $l){
-			$plain = Utils::stripColors($l);
-			if(trim($plain) !== ""){
-				$lines[$i] = $l . str_repeat(" ", $max - strlen($plain));
+			if(isset($lengths[$i])){
+				$lines[$i] = $l . str_repeat(" ", $max - $lengths[$i]);
 			}
 		}
 		return implode("\n", $lines);

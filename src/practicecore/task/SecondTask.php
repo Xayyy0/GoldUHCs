@@ -20,7 +20,7 @@ class SecondTask extends PluginTask{
 		$p->meetup->tick();
 		$p->boards->tick();
 		$this->counter++;
-		if($this->counter % 3 === 0){
+		if($this->counter % 10 === 0){
 			$p->menus->refreshLive();
 		}
 		$auto = (int) $p->getConfig()->get("autosave-seconds", 300);
