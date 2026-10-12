@@ -153,16 +153,18 @@ class HudManager{
 	private function align($text){
 		$lines = explode("\n", $text);
 		$max = 0;
-		foreach($lines as $l){
+		$plains = [];
+		foreach($lines as $i => $l){
 			$plain = Utils::stripColors($l);
-			if(trim($plain) !== ""){
-				$max = max($max, strlen($plain));
+			$len = strlen(trim($plain));
+			$plains[$i] = strlen($plain);
+			if($len > 0){
+				$max = max($max, $plains[$i]);
 			}
 		}
 		foreach($lines as $i => $l){
-			$plain = Utils::stripColors($l);
-			if(trim($plain) !== ""){
-				$lines[$i] = $l . str_repeat(" ", $max - strlen($plain));
+			if($plains[$i] > 0 and $max > $plains[$i]){
+				$lines[$i] = $l . str_repeat(" ", $max - $plains[$i]);
 			}
 		}
 		return implode("\n", $lines);

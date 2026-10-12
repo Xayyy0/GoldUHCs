@@ -24,6 +24,7 @@ class LeaderboardManager{
 
 	private $shown = [];
 	private $lastRefresh = 0;
+	private $lastText = [];
 
 	public function __construct(PracticeCore $plugin){
 		$this->plugin = $plugin;
@@ -94,27 +95,33 @@ class LeaderboardManager{
 	private function refresh($force = false){
 		$every = max(5, (int) $this->plugin->getConfig()->getNested("holograms.refresh-seconds", 20));
 		if(!$force and time() - $this->lastRefresh < $every){
-			return false;
+			return [];
 		}
 		$this->lastRefresh = time();
+		$changedIds = [];
 		foreach($this->cfg->getAll() as $id => $d){
 			$level = Utils::level($d["pos"]["world"]);
 			if($level === null){
 				continue;
 			}
 			list($title, $body) = $this->text($d["type"]);
+			$fullText = $title . "\n" . $body;
 			if(!isset($this->particles[$id])){
 				$this->particles[$id] = new FloatingTextParticle(new Vector3($d["pos"]["x"], $d["pos"]["y"] + 1.8, $d["pos"]["z"]), $body, $title);
-			}else{
+				$this->lastText[$id] = $fullText;
+				$changedIds[$id] = true;
+			}elseif(!isset($this->lastText[$id]) or $this->lastText[$id] !== $fullText){
 				$this->particles[$id]->setTitle($title);
 				$this->particles[$id]->setText($body);
+				$this->lastText[$id] = $fullText;
+				$changedIds[$id] = true;
 			}
 		}
-		return true;
+		return $changedIds;
 	}
 
 	public function tick(){
-		$refreshed = $this->refresh(false);
+		$changedIds = $this->refresh(false);
 		foreach($this->plugin->getServer()->getOnlinePlayers() as $p){
 			if(!$p->spawned or $p->closed){
 				continue;
@@ -126,7 +133,8 @@ class LeaderboardManager{
 				}
 				$here = $p->getLevel()->getFolderName() === $d["pos"]["world"];
 				$on = isset($this->shown[$key][$id]);
-				if($here and (!$on or $refreshed)){
+				$changed = isset($changedIds[$id]);
+				if($here and (!$on or $changed)){
 					$this->send($p, $id, false);
 					$this->shown[$key][$id] = true;
 				}elseif(!$here and $on){

@@ -18,6 +18,7 @@ class PracticePlayer extends Player{
 	}
 
 	public function attack($damage, EntityDamageEvent $source){
+		$now = microtime(true);
 		if($source instanceof EntityDamageByEntityEvent){
 			$damager = $source->getDamager();
 			$plugin = PracticeCore::getInstance();
@@ -28,7 +29,7 @@ class PracticePlayer extends Player{
 
 		$this->kbProfile = null;
 
-		if(microtime(true) >= $this->hitFreeAt - 0.025){
+		if($now >= $this->hitFreeAt - 0.025){
 			$this->attackTime = 0;
 		}
 
@@ -36,7 +37,7 @@ class PracticePlayer extends Player{
 
 		if(!$source->isCancelled() and $this->kbProfile !== null){
 			$speed = max(0, (int) $this->kbProfile[2]);
-			$this->hitFreeAt = microtime(true) + $speed * 0.05;
+			$this->hitFreeAt = $now + $speed * 0.05;
 
 			$this->attackTime = $speed > 0 ? 100000 : 0;
 		}
@@ -53,20 +54,18 @@ class PracticePlayer extends Player{
 		if($f <= 0){
 			return;
 		}
-		$f = 1 / $f;
 
 		$h = $this->kbProfile[0];
 		$v = $this->kbProfile[1];
+		$mult = $h / $f;
 
-		$motion = new Vector3($this->motionX / 2, $this->motionY / 2, $this->motionZ / 2);
-		$motion->x += $x * $f * $h;
-		$motion->y += $v;
-		$motion->z += $z * $f * $h;
-
-		if($motion->y > $v){
-			$motion->y = $v;
+		$mx = $this->motionX / 2 + ($x * $mult);
+		$my = $this->motionY / 2 + $v;
+		if($my > $v){
+			$my = $v;
 		}
+		$mz = $this->motionZ / 2 + ($z * $mult);
 
-		$this->setMotion($motion);
+		$this->setMotion(new Vector3($mx, $my, $mz));
 	}
 }
