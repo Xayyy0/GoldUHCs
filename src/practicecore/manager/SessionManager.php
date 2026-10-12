@@ -79,7 +79,10 @@ class SessionManager{
 		return $s;
 	}
 
-	public function save(Session $s){
+	public function save(Session $s, $force = false){
+		if(!$force and !$s->dirty){
+			return;
+		}
 		$c = new Config($this->file($s->name), Config::YAML);
 		$c->set("name", $s->name);
 		foreach(self::$SETTINGS as $k){
@@ -96,6 +99,7 @@ class SessionManager{
 		$c->set("meetup-played", $s->meetupPlayed);
 		$c->set("meetup-wins", $s->meetupWins);
 		$c->save();
+		$s->dirty = false;
 		$this->plugin->stats->touch($s);
 	}
 

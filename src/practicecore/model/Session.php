@@ -16,6 +16,8 @@ class Session{
 	public $settings = [];
 	public $welcomed = false;
 
+	public $dirty = false;
+
 	public $elo = 800;
 	public $kills = 0;
 	public $deaths = 0;

@@ -175,7 +175,7 @@ class PracticeCore extends PluginBase{
 		$now = microtime(true);
 
 		if(!empty($s->settings["cps-counter"])
-			and $now - $s->lastCpsPopup >= 0.2
+			and $now - $s->lastCpsPopup >= 0.5
 			and $s->state !== Session::FFA_DEAD and $s->state !== Session::MEETUP_DEAD
 			and !($s->flash !== null and $s->flashUntil > $now)
 		){

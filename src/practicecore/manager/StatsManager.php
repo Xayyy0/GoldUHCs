@@ -10,6 +10,8 @@ class StatsManager{
 
 	private $index = [];
 
+	private $sortedCache = [];
+
 	public function __construct(PracticeCore $plugin){
 		$this->plugin = $plugin;
 	}
@@ -33,10 +35,13 @@ class StatsManager{
 				"meetupWins" => isset($d["meetup-wins"]) ? (int) $d["meetup-wins"] : 0
 			];
 		}
+		$this->sortedCache = [];
 	}
 
 	public function touch(Session $s){
+		$s->dirty = true;
 		$this->index[strtolower($s->name)] = ["name" => $s->name, "elo" => $s->elo, "kills" => $s->kills, "deaths" => $s->deaths, "meetupWins" => $s->meetupWins];
+		$this->sortedCache = [];
 	}
 
 	public function rankLabel($elo){
@@ -104,6 +109,9 @@ class StatsManager{
 	}
 
 	private function sorted($type){
+		if(isset($this->sortedCache[$type])){
+			return $this->sortedCache[$type];
+		}
 		$rows = array_values($this->index);
 		usort($rows, function($a, $b) use ($type){
 			if($a[$type] === $b[$type]){
@@ -111,6 +119,7 @@ class StatsManager{
 			}
 			return $b[$type] <=> $a[$type];
 		});
+		$this->sortedCache[$type] = $rows;
 		return $rows;
 	}
 
