@@ -200,8 +200,11 @@ class PracticeCore extends PluginBase{
 			}
 		}
 		if($weather and $cfg->getNested("world.no-rain", true)){
-			foreach($this->getServer()->getOnlinePlayers() as $p){
-				$this->clearWeather($p);
+			$players = $this->getServer()->getOnlinePlayers();
+			if(count($players) > 0){
+				foreach($players as $p){
+					$this->clearWeather($p);
+				}
 			}
 		}
 	}

@@ -299,20 +299,26 @@ class EventListener implements Listener{
 	}
 
 	public function onMove(PlayerMoveEvent $e){
+		$from = $e->getFrom();
+		$to = $e->getTo();
+		$dx = $to->x - $from->x;
+		$dz = $to->z - $from->z;
+		$distSq = $dx * $dx + $dz * $dz;
+		if($distSq < 0.000001){
+			return;
+		}
+
 		$p = $e->getPlayer();
 		$s = $this->session($p);
 		if($s === null){
 			return;
 		}
-		$from = $e->getFrom();
-		$to = $e->getTo();
-		$moved = (abs($from->x - $to->x) > 0.0001 or abs($from->z - $to->z) > 0.0001);
 
-		if($moved and $this->plugin->duels->isFrozen($s)){
+		if($this->plugin->duels->isFrozen($s)){
 			$e->setCancelled(true);
 			return;
 		}
-		if($moved and $s->state === Session::MEETUP and $this->plugin->meetup->outsideBorder($p, $to)){
+		if($s->state === Session::MEETUP and $this->plugin->meetup->outsideBorder($p, $to)){
 			$e->setCancelled(true);
 			if(time() !== $s->lastBorderMsg){
 				$s->lastBorderMsg = time();
@@ -321,12 +327,10 @@ class EventListener implements Listener{
 			return;
 		}
 
-		if($moved and !empty($s->settings["auto-sprint"]) and $s->state !== Session::FFA_DEAD and $s->state !== Session::MEETUP_DEAD){
-			$dx = $to->x - $from->x;
-			$dz = $to->z - $from->z;
-			$len = sqrt($dx * $dx + $dz * $dz);
+		if(!empty($s->settings["auto-sprint"]) and $s->state !== Session::FFA_DEAD and $s->state !== Session::MEETUP_DEAD){
+			$len = sqrt($distSq);
 			$rad = deg2rad($to->yaw);
-			$forward = ($len > 0.0001) && ((($dx * -sin($rad)) + ($dz * cos($rad))) / $len > 0.35);
+			$forward = (($dx * -sin($rad)) + ($dz * cos($rad))) / $len > 0.35;
 			if($forward){
 				$s->lastForward = microtime(true);
 				if(!$p->isSprinting()){

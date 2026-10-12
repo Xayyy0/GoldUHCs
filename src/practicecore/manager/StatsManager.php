@@ -9,9 +9,16 @@ class StatsManager{
 	private $plugin;
 
 	private $index = [];
+	private $sortedCache = [];
+	private $dirty = true;
+	private $ranksCache = null;
 
 	public function __construct(PracticeCore $plugin){
 		$this->plugin = $plugin;
+	}
+
+	public function invalidateRanksCache(){
+		$this->ranksCache = null;
 	}
 
 	public function buildIndex(){
@@ -33,17 +40,28 @@ class StatsManager{
 				"meetupWins" => isset($d["meetup-wins"]) ? (int) $d["meetup-wins"] : 0
 			];
 		}
+		$this->dirty = true;
+		$this->sortedCache = [];
 	}
 
 	public function touch(Session $s){
-		$this->index[strtolower($s->name)] = ["name" => $s->name, "elo" => $s->elo, "kills" => $s->kills, "deaths" => $s->deaths, "meetupWins" => $s->meetupWins];
+		$key = strtolower($s->name);
+		$existing = isset($this->index[$key]) ? $this->index[$key] : null;
+		$new = ["name" => $s->name, "elo" => $s->elo, "kills" => $s->kills, "deaths" => $s->deaths, "meetupWins" => $s->meetupWins];
+		if($existing === null or $existing !== $new){
+			$this->index[$key] = $new;
+			$this->dirty = true;
+			$this->sortedCache = [];
+		}
 	}
 
 	public function rankLabel($elo){
-		$ranks = $this->plugin->getConfig()->get("ranks", []);
+		if($this->ranksCache === null){
+			$this->ranksCache = $this->plugin->getConfig()->get("ranks", []);
+		}
 		$best = null;
 		$bestMin = -1;
-		foreach($ranks as $r){
+		foreach($this->ranksCache as $r){
 			$min = isset($r["min"]) ? (int) $r["min"] : 0;
 			if($min <= $elo and $min >= $bestMin){
 				$bestMin = $min;
@@ -104,6 +122,9 @@ class StatsManager{
 	}
 
 	private function sorted($type){
+		if(isset($this->sortedCache[$type])){
+			return $this->sortedCache[$type];
+		}
 		$rows = array_values($this->index);
 		usort($rows, function($a, $b) use ($type){
 			if($a[$type] === $b[$type]){
@@ -111,6 +132,7 @@ class StatsManager{
 			}
 			return $b[$type] <=> $a[$type];
 		});
+		$this->sortedCache[$type] = $rows;
 		return $rows;
 	}
 
