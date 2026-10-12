@@ -10,9 +10,15 @@ use practicecore\utils\Utils;
 class HudManager{
 	private $plugin;
 	private $counter = 0;
+	private $modesCache = null;
+	private $onlineCountCache = null;
 
 	public function __construct(PracticeCore $plugin){
 		$this->plugin = $plugin;
+	}
+
+	public function invalidateModesCache(){
+		$this->modesCache = null;
 	}
 
 	public function flash(Player $p, $text, $seconds = 1.5){
@@ -30,6 +36,8 @@ class HudManager{
 		$panelOn = (bool) $cfg->getNested("hud.enabled", true);
 		$every = max(1, (int) round(((int) $cfg->getNested("hud.update-ticks", 10)) / 5));
 		$now = microtime(true);
+		$this->onlineCountCache = null;
+
 		foreach($this->plugin->sessions->all() as $s){
 			$p = $this->plugin->getServer()->getPlayerExact($s->name);
 			if($p === null){
@@ -76,8 +84,10 @@ class HudManager{
 	}
 
 	private function modeDisplay($mode){
-		$modes = $this->plugin->getConfig()->get("modes", []);
-		return isset($modes[$mode]["display"]) ? $modes[$mode]["display"] : (string) $mode;
+		if($this->modesCache === null){
+			$this->modesCache = $this->plugin->getConfig()->get("modes", []);
+		}
+		return isset($this->modesCache[$mode]["display"]) ? $this->modesCache[$mode]["display"] : (string) $mode;
 	}
 
 	private function vars(Player $p, Session $s, $t){
@@ -86,7 +96,12 @@ class HudManager{
 		};
 		$meetup = $this->plugin->meetup;
 		$v = ["name" => $p->getName(), "nick" => $p->getName()];
-		if($has("online")) $v["online"] = count($this->plugin->getServer()->getOnlinePlayers());
+		if($has("online")){
+			if($this->onlineCountCache === null){
+				$this->onlineCountCache = count($this->plugin->getServer()->getOnlinePlayers());
+			}
+			$v["online"] = $this->onlineCountCache;
+		}
 		if($has("maxOnline")) $v["maxOnline"] = $this->plugin->getServer()->getMaxPlayers();
 		if($has("elo")) $v["elo"] = $s->elo;
 		if($has("rank")) $v["rank"] = $this->plugin->stats->rankLabel($s->elo);
