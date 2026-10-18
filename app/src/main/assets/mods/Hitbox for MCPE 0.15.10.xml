@@ -1,0 +1,84 @@
+var hbOn = true;
+var hbW = 1.4;
+var hbH = 1.8;
+var hbRange = 12;
+var hbTick = 0;
+var hbSeen = {};
+var hbTag = "§7[§6Hitbox§7] §r";
+
+function hbSet(ent, w, h) {
+    try {
+        Entity.setCollisionSize(ent, w, h);
+    } catch (e) {}
+}
+
+function hbRestore() {
+    var list = Server.getAllPlayers();
+    if (list == null) return;
+    for (var i = 0; i < list.length; i++) {
+        if (list[i] != getPlayerEnt()) hbSet(list[i], 0.6, 1.8);
+    }
+    hbSeen = {};
+}
+
+function modTick() {
+    if (!hbOn) return;
+    hbTick++;
+    if (hbTick < 5) return;
+    hbTick = 0;
+    var list = Server.getAllPlayers();
+    if (list == null) return;
+    var me = getPlayerEnt();
+    var px = getPlayerX();
+    var py = getPlayerY();
+    var pz = getPlayerZ();
+    for (var i = 0; i < list.length; i++) {
+        var e = list[i];
+        if (e == me) continue;
+        var dx = Entity.getX(e) - px;
+        var dy = Entity.getY(e) - py;
+        var dz = Entity.getZ(e) - pz;
+        if (dx * dx + dy * dy + dz * dz <= hbRange * hbRange) {
+            hbSet(e, hbW, hbH);
+            hbSeen[e] = true;
+        } else if (hbSeen[e]) {
+            hbSet(e, 0.6, 1.8);
+            delete hbSeen[e];
+        }
+    }
+}
+
+function chatHook(text) {
+    var a = text.split(" ");
+    if (a[0] == ".hb") {
+        preventDefault();
+        if (a.length >= 3) {
+            var w = parseFloat(a[1]);
+            var h = parseFloat(a[2]);
+            if (w > 0 && h > 0) {
+                hbW = w;
+                hbH = h;
+                clientMessage(hbTag + "§aTamaño: " + w + " x " + h);
+                return;
+            }
+        }
+        hbOn = !hbOn;
+        if (hbOn) {
+            clientMessage(hbTag + "§aActivado (" + hbW + " x " + hbH + ")");
+        } else {
+            hbRestore();
+            clientMessage(hbTag + "§cDesactivado");
+        }
+    }
+}
+
+function leaveGame() {
+    hbSeen = {};
+    hbTick = 0;
+}
+
+function newLevel() {
+    hbSeen = {};
+    hbTick = 0;
+    clientMessage(hbTag + "§aCargado. §7.hb §fon/off, §7.hb <ancho> <alto>");
+}
