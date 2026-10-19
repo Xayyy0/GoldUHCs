@@ -159,10 +159,26 @@ public class MainActivity extends AppCompatActivity implements ModEngine.Listene
         Intent intent = getPackageManager().getLaunchIntentForPackage("com.mojang.minecraftpe");
         if (intent != null) {
             log("Launching com.mojang.minecraftpe...");
-            startActivity(intent);
-        } else {
-            log("com.mojang.minecraftpe is not installed on this device.");
-            Toast.makeText(this, "Minecraft PE not found!", Toast.LENGTH_SHORT).show();
+            try {
+                startActivity(intent);
+                return;
+            } catch (Throwable t) {
+                Log.e(TAG, "Failed launching via launch intent", t);
+            }
+        }
+
+        // Fallback: create explicit main launcher intent for com.mojang.minecraftpe
+        try {
+            Intent fallbackIntent = new Intent(Intent.ACTION_MAIN);
+            fallbackIntent.addCategory(Intent.CATEGORY_LAUNCHER);
+            fallbackIntent.setPackage("com.mojang.minecraftpe");
+            fallbackIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            log("Launching com.mojang.minecraftpe via fallback intent...");
+            startActivity(fallbackIntent);
+        } catch (Throwable t) {
+            Log.e(TAG, "Failed launching com.mojang.minecraftpe via fallback intent", t);
+            log("com.mojang.minecraftpe could not be launched. Check if it is installed.");
+            Toast.makeText(this, "Minecraft PE (com.mojang.minecraftpe) not found or cannot be launched!", Toast.LENGTH_LONG).show();
         }
     }
 
