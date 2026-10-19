@@ -63,14 +63,14 @@ public class ModPEApi {
         return new Object[]{1L};
     }
 
-    public static Object[] getAllEntities() {
+    public static Object[] getAll() {
         if (sModEngine != null) {
             return sModEngine.getAllEntities();
         }
         return new Object[]{1L};
     }
 
-    public static float getEntityX(Object ent) {
+    public static float getX(Object ent) {
         long ptr = parseEntityPtr(ent);
         if (sModEngine != null) {
             return sModEngine.getEntityX(ptr);
@@ -78,7 +78,7 @@ public class ModPEApi {
         return 0.0f;
     }
 
-    public static float getEntityY(Object ent) {
+    public static float getY(Object ent) {
         long ptr = parseEntityPtr(ent);
         if (sModEngine != null) {
             return sModEngine.getEntityY(ptr);
@@ -86,7 +86,7 @@ public class ModPEApi {
         return 0.0f;
     }
 
-    public static float getEntityZ(Object ent) {
+    public static float getZ(Object ent) {
         long ptr = parseEntityPtr(ent);
         if (sModEngine != null) {
             return sModEngine.getEntityZ(ptr);
@@ -94,7 +94,7 @@ public class ModPEApi {
         return 0.0f;
     }
 
-    public static void setEntityCollisionSize(Object ent, double width, double height) {
+    public static void setCollisionSize(Object ent, double width, double height) {
         long ptr = parseEntityPtr(ent);
         if (sModEngine != null) {
             sModEngine.setCollisionSize(ptr, (float) width, (float) height);
