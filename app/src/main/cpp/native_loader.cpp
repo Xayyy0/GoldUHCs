@@ -105,6 +105,7 @@ Java_com_mcpelauncher_ModEngine_nativeInitHooks(JNIEnv* env, jobject thiz) {
     void* handle = dlopen("libminecraftpe.so", RTLD_NOW | RTLD_GLOBAL);
     if (!handle) {
         LOGE("libminecraftpe.so not loaded in current process space: %s", dlerror());
+        LOGI("Notice: Approach B (patched APK containing libminecraftpe.so) is required on Android 16 for in-process symbol hooking.");
         return JNI_FALSE;
     }
 
@@ -112,21 +113,27 @@ Java_com_mcpelauncher_ModEngine_nativeInitHooks(JNIEnv* env, jobject thiz) {
     void* pSetSize = dlsym(handle, "_ZN6Entity7setSizeEff");
     if (pSetSize) {
         DobbyHook(pSetSize, (void*)hooked_Entity_setSize, (void**)&g_orig_Entity_setSize);
-        LOGI("Hooked _ZN6Entity7setSizeEff");
+        LOGI("Hooked _ZN6Entity7setSizeEff at %p", pSetSize);
+    } else {
+        LOGE("Failed to find symbol _ZN6Entity7setSizeEff");
     }
 
     // Resolve symbol _ZN8GameMode6attackER6PlayerR6Entity
     void* pAttack = dlsym(handle, "_ZN8GameMode6attackER6PlayerR6Entity");
     if (pAttack) {
         DobbyHook(pAttack, (void*)hooked_GameMode_attack, (void**)&g_orig_GameMode_attack);
-        LOGI("Hooked _ZN8GameMode6attackER6PlayerR6Entity");
+        LOGI("Hooked _ZN8GameMode6attackER6PlayerR6Entity at %p", pAttack);
+    } else {
+        LOGE("Failed to find symbol _ZN8GameMode6attackER6PlayerR6Entity");
     }
 
     // Resolve symbol _ZN8GameMode4tickEv
     void* pTick = dlsym(handle, "_ZN8GameMode4tickEv");
     if (pTick) {
         DobbyHook(pTick, (void*)hooked_GameMode_tick, (void**)&g_orig_GameMode_tick);
-        LOGI("Hooked _ZN8GameMode4tickEv");
+        LOGI("Hooked _ZN8GameMode4tickEv at %p", pTick);
+    } else {
+        LOGE("Failed to find symbol _ZN8GameMode4tickEv");
     }
 
     return JNI_TRUE;

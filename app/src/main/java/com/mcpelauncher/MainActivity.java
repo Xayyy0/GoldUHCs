@@ -85,6 +85,11 @@ public class MainActivity extends AppCompatActivity implements ModEngine.Listene
             mFilePickerLauncher.launch(new String[]{"*/*"});
         });
 
+        log("--- MOD LOADER STATUS ---");
+        log("Android 16 / API 36 Process Isolation Notice:");
+        log("• Approach A (External Launcher): Cannot hook installed com.mojang.minecraftpe directly due to SELinux cross-package rules.");
+        log("• Approach B (APK Patch / Repack): Move libminecraftpe.so into assets/ or lib/ inside the patched APK for full in-process hooking.");
+
         mModEngine.onNewLevel();
     }
 

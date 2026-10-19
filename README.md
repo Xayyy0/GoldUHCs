@@ -38,7 +38,15 @@ BlockLauncher originally used `createPackageContext("com.mojang.minecraftpe", CO
 3. **No Root Memory Injection**: Without root (`su`), process `com.mcpelauncher` cannot `ptrace` or modify memory of a separate `com.mojang.minecraftpe` process.
 
 ### Approach B (Standalone Patched / Embedded Native Loader)
-To bypass Android 10+ inter-app security boundaries without root, the loader native shared object (`libmodloader.so`) and Java script engine must execute inside the SAME process address space as `libminecraftpe.so` (either embedded directly in a patched target APK or loaded in a shared process container).
+To bypass Android 10+ inter-app security boundaries without root, the loader native shared object (`libmodloader.so`) and Java script engine execute inside the SAME process address space as `libminecraftpe.so` (embedded directly in a patched target APK).
+
+#### Step-by-Step Approach B Repacking & Patching Guide:
+1. **Extract Target APK**: Unpack `com.mojang.minecraftpe` (0.15.10) using APK Editor or `apktool`.
+2. **Place Native Binaries**:
+   - Place `libminecraftpe.so` (22.65 MB) into `assets/` or `lib/armeabi-v7a/`.
+   - Place `libmodloader.so` (built from `app/src/main/cpp`) into `lib/armeabi-v7a/`.
+3. **Merge Dex & Classes**: Inject launcher classes (`com.mcpelauncher.ModEngine`, `com.mcpelauncher.MainActivity`) into `classes.dex`.
+4. **Re-sign & Install**: Sign the patched APK using `apksigner` or `uber-apk-signer` and install on Android 16.
 
 *Hooking Mechanism:*
 * Utilizes **Dobby** ARM32 Thumb-2 inline hooking framework.
