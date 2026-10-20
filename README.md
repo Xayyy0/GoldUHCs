@@ -1,44 +1,92 @@
-# GoldUHCs (PocketMine API 2.x)
+# MCPELauncher - ModPE Loader for Android 16 (MCPE 0.15.10)
 
-Install: copy the `GoldUHCs` folder (or the .zip contents) into `plugins/`.
+MCPELauncher is a BlockLauncher-style ModPE script engine and native loader project built for Android 16 (API 36) targeting Minecraft PE 0.15.10 (32-bit ARM `armeabi-v7a`).
 
-## Lobby (same layout as the reference video)
-Hotbar: slot 0 **Unranked**, 1 **Ranked**, 3 **FFA**, 5 **Top Leaderboards**, 7 **My Stats**, 8 **Settings**.
-* Unranked / Ranked / FFA / Settings replace the hotbar with a submenu made of items (plus a *Back* item).
-* My Stats and Top Leaderboards print in chat (also `/stats [player]` and `/top`).
-* Side panel on the right: Online / Elo / Rank / Kills. It is built from frame templates in
-  `config.yml` (`hud.scoreboard.<state>`) with `$center`, `{n}` and `$placeholders`; several frames = animation.
-  Tune its position in game with `/practice hud center <n>` (more right) and `/practice hud lines <n>` (higher).
-* Elo starts at 800, changes only in Ranked duels; ranks are configured in `config.yml`.
+## Requirements
+* Android 7.0 (API 24) or higher (Target SDK 35 for Android 16 compatibility).
+* 32-bit ARM (`armeabi-v7a`) application execution support on the host system.
 
-## Quick setup
-```
-/practice setlobby
-/practice setprelobby
-/practice arena ffa create Sand nodebuff      (stand on the first spawn)
-/practice arena ffa addspawn Sand
-/practice arena duel create Duel1
-/practice arena duel setpos Duel1 1           (then stand on the other spot)
-/practice arena duel setpos Duel1 2
-/practice lb create kills                    (floating leaderboard where you stand; also: deaths, meetupwins)
-/practice lb remove                          (removes the closest leaderboard)
-/meetup map set Forest 100                    (center = your position, radius 100)
-/meetup schedule 10m Forest duo               (solo | duo | trio)
-```
-Knockback: own formula, 3 values per mode: `/practice kb uhc 0.42 0.45 10` = xkb (horizontal), ykb (vertical) and speed (hit immunity in ticks).
-Kits: `kits.yml`. Texts: `messages.yml`. Items, panel, Elo, ranks, modes: `config.yml`.
+## How to Install and Use
 
-## Structure
-```
-plugin.yml
-resources/            config.yml, kits.yml, messages.yml
-src/practicecore/
-  PracticeCore.php    main class
-  command/            CommandHandler
-  entity/             PracticePlayer
-  listener/           EventListener
-  manager/            Session, Stats, Menu, Hud, Kit, Knockback, Arena, Leaderboard, FFA, Duel, Team, Meetup managers
-  model/              Session, DuelMatch, Team
-  task/               ClosureTask, SecondTask, HudTask
-  utils/              Lang, Utils
-```
+1. **Install the APK**:
+   - Download `app-debug.apk` built from GitHub Actions artifacts or build using `./gradlew assembleDebug`.
+   - Install the APK on your Android 16 device.
+
+2. **Script Storage Location**:
+   - App-specific external storage path:
+     `/sdcard/Android/data/com.mcpelauncher/files/mods/`
+   - Default bundled script: `Hitbox for MCPE 0.15.10.xml` (copied automatically on first launch).
+
+3. **Importing Scripts**:
+   - Open MCPELauncher.
+   - Tap **Import Script** to open the Android System Storage Access Framework (SAF) document picker and select any `.xml` or `.js` ModPE script.
+
+4. **Testing Commands and Hooks**:
+   - Enter commands (e.g. `.hb` or `.hb 1.4 1.8`) into the **Chat Hook / Command Tester** field in the launcher interface to verify `chatHook` processing.
+   - Tap **Launch MCPE** to start `com.mojang.minecraftpe`.
+
+---
+
+## Technical Architecture & Android 16 Security Analysis (Approach A vs Approach B)
+
+### Approach A (Original BlockLauncher Style - Cross-App Context Loading)
+BlockLauncher originally used `createPackageContext("com.mojang.minecraftpe", CONTEXT_INCLUDE_CODE | CONTEXT_IGNORE_SECURITY)` to load `libminecraftpe.so` from the installed game into its own launcher process.
+
+*Why Approach A fails on Android 10+ / Android 16 without root:*
+1. **SELinux Domain Isolation (`untrusted_app`)**: Modern Android strictly isolates application UID private directories (`/data/data/com.mojang.minecraftpe` and `/data/app/...`). Calling `dlopen()` on external application library paths returns `EACCES` (Permission denied).
+2. **Code Loading Policy**: Android 10 (targetSdk 29+) enforces W^X constraints and throws `SecurityException` when an app attempts to load executable code from another package without matching signatures or shared UIDs.
+3. **No Root Memory Injection**: Without root (`su`), process `com.mcpelauncher` cannot `ptrace` or modify memory of a separate `com.mojang.minecraftpe` process.
+
+### Approach B (Standalone Patched / Embedded Native Loader)
+To bypass Android 10+ inter-app security boundaries without root, the loader native shared object (`libmodloader.so`) and Java script engine execute inside the SAME process address space as `libminecraftpe.so` (embedded directly in a patched target APK).
+
+#### Step-by-Step Approach B Repacking & Patching Guide:
+1. **Extract Target APK**: Unpack `com.mojang.minecraftpe` (0.15.10) using APK Editor or `apktool`.
+2. **Place Native Binaries**:
+   - Place `libminecraftpe.so` (22.65 MB) into `assets/` or `lib/armeabi-v7a/`.
+   - Place `libmodloader.so` (built from `app/src/main/cpp`) into `lib/armeabi-v7a/`.
+3. **Merge Dex & Classes**: Inject launcher classes (`com.mcpelauncher.ModEngine`, `com.mcpelauncher.MainActivity`) into `classes.dex`.
+4. **Re-sign & Install**: Sign the patched APK using `apksigner` or `uber-apk-signer` and install on Android 16.
+
+*Hooking Mechanism:*
+* Utilizes **Dobby** ARM32 Thumb-2 inline hooking framework.
+* Target symbols in `libminecraftpe.so`:
+  * `_ZN6Entity7setSizeEff` (`Entity::setSize(float w, float h)`) - Modifies entity collision width (offset `0xb4`) and height (offset `0xb8`).
+  * `_ZN8GameMode6attackER6PlayerR6Entity` (`GameMode::attack`) - Triggers `attackHook(attacker, victim)`.
+  * `_ZN8GameMode4tickEv` (`GameMode::tick`) - Triggers `modTick()`.
+
+---
+
+## ModPE API Implementation Summary
+
+### Implemented Hooks
+* `modTick()`
+* `chatHook(text)`
+* `newLevel()`
+* `leaveGame()`
+* `attackHook(attacker, victim)`
+
+### Implemented API Functions
+* `clientMessage(msg)`
+* `preventDefault()`
+* `getPlayerEnt()`
+* `getPlayerX()`, `getPlayerY()`, `getPlayerZ()`
+* `Server.getAllPlayers()`
+* `Entity.getAll()`
+* `Entity.getX(ent)`, `Entity.getY(ent)`, `Entity.getZ(ent)`
+* `Entity.setCollisionSize(ent, width, height)`
+
+---
+
+## Status & Compatibility Matrix
+
+| Feature | Status | Notes |
+| :--- | :--- | :--- |
+| Android 16 (API 36) APK Packaging | **Working** | targetSdk 35, minSdk 24 |
+| Rhino JavaScript Engine | **Working** | Embeds Mozilla Rhino 1.7.15 |
+| ModPE Script Loader & SAF Importer | **Working** | Scoped storage compatible |
+| Default `Hitbox for MCPE 0.15.10.xml` | **Bundled** | Loaded from assets |
+| ARM32 Thumb-2 Dobby Hooks | **Implemented** | `Entity::setSize`, `GameMode::attack`, `GameMode::tick` |
+| Approach A (Separate Launcher) | **Blocked on Android 10+** | Requires root due to SELinux/UID isolation |
+| 64-bit Only Devices | **Unsupported** | MCPE 0.15.10 is 32-bit ARM only |
+| Physical Hardware Execution | **Untested** | Environment is headless Linux CI |
