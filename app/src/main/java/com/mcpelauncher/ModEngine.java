@@ -22,6 +22,12 @@ public class ModEngine {
 
     static {
         try {
+            System.loadLibrary("minecraftpe");
+            Log.i(TAG, "Loaded libminecraftpe.so in process");
+        } catch (UnsatisfiedLinkError e) {
+            Log.w(TAG, "libminecraftpe.so not found in APK native libs, attempting fallback", e);
+        }
+        try {
             System.loadLibrary("modloader");
         } catch (UnsatisfiedLinkError e) {
             Log.e(TAG, "Failed to load modloader native library", e);

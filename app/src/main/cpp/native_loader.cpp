@@ -104,8 +104,10 @@ extern "C" JNIEXPORT jboolean JNICALL
 Java_com_mcpelauncher_ModEngine_nativeInitHooks(JNIEnv* env, jobject thiz) {
     void* handle = dlopen("libminecraftpe.so", RTLD_NOW | RTLD_GLOBAL);
     if (!handle) {
+        handle = RTLD_DEFAULT;
+    }
+    if (!handle) {
         LOGE("libminecraftpe.so not loaded in current process space: %s", dlerror());
-        LOGI("Notice: Approach B (patched APK containing libminecraftpe.so) is required on Android 16 for in-process symbol hooking.");
         return JNI_FALSE;
     }
 
