@@ -1,0 +1,251 @@
+name: Build MCPE 0.15.10 arm64
+
+# Se ejecuta a mano: pestaña Actions -> "Build MCPE 0.15.10 arm64" -> Run workflow.
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - name: Checkout (aqui estan las partes del APK)
+        uses: actions/checkout@v4
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Gradle 8.11.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+
+      - name: Clave de firma (se conserva entre compilaciones)
+        uses: actions/cache@v4
+        with:
+          path: ~/.mcpe-arm64
+          key: mcpe-signing-key-v1
+
+      - name: Paquetes del sistema
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y e2fsprogs libboost-dev ninja-build cmake unzip zip curl python3
+
+      - name: Descargar el proyecto base (mcpe-arm64)
+        run: |
+          set -eux
+          git clone https://github.com/yxrxtskxy/mcpe-arm64 proj
+          git -C proj checkout 0c807a391f8e86e5268eb3026628426a34992ca5
+
+      - name: Pedir permiso de todos los archivos al abrir la app
+        run: |
+          set -eux
+          cat > "$GITHUB_WORKSPACE/patch_storage.py" <<'PYEOF'
+          import sys
+          path = sys.argv[1]
+          s = open(path, encoding="utf-8").read()
+          old = """    protected void onCreate(Bundle state) {
+                  super.onCreate(state);
+                  try {"""
+          new = """    protected void onCreate(Bundle state) {
+                  super.onCreate(state);
+                  if (android.os.Build.VERSION.SDK_INT >= 30 && !android.os.Environment.isExternalStorageManager()) {
+                      try {
+                          startActivity(new Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                                  android.net.Uri.fromParts("package", getPackageName(), null)));
+                          askedStorage = true;
+                          android.widget.Toast.makeText(this,
+                                  "Activa \\"Permitir administrar todos los archivos\\" y vuelve atras",
+                                  android.widget.Toast.LENGTH_LONG).show();
+                          return;
+                      } catch (Exception e) {
+                          Log.w(TAG, "cannot open the all files access page", e);
+                      }
+                  }
+                  begin();
+              }
+
+              private boolean askedStorage;
+              private boolean leftForSettings;
+
+              @Override
+              protected void onPause() {
+                  super.onPause();
+                  if (askedStorage) leftForSettings = true;
+              }
+
+              @Override
+              protected void onResume() {
+                  super.onResume();
+                  if (leftForSettings) {
+                      leftForSettings = false;
+                      askedStorage = false;
+                      begin();
+                  }
+              }
+
+              private void begin() {
+                  try {"""
+          assert s.count(old) == 1, "onCreate not found exactly once"
+          assert "askedStorage" not in s
+          s = s.replace(old, new)
+          open(path, "w", encoding="utf-8").write(s)
+          print("patched", path)
+          PYEOF
+          python3 "$GITHUB_WORKSPACE/patch_storage.py" "$GITHUB_WORKSPACE/proj/android/app/src/main/java/com/zettabridge/launcher/GameLauncherActivity.java"
+          grep -n "isExternalStorageManager" "$GITHUB_WORKSPACE/proj/android/app/src/main/java/com/zettabridge/launcher/GameLauncherActivity.java"
+
+      - name: Juntar y extraer el APK del juego (usa la libminecraftpe.so de tu propio zip)
+        run: |
+          set -eux
+          cd "$GITHUB_WORKSPACE"
+          ls -la
+          PARTS=$(ls | grep -E '\.zip\.[0-9]+$' | sort)
+          if [ -z "$PARTS" ]; then
+            echo "ERROR: no encuentro las partes .zip.001 / .zip.002 en la raiz del repositorio"
+            exit 1
+          fi
+          echo "Partes: $PARTS"
+          printf '%s\n' "$PARTS" | while IFS= read -r f; do cat "$f"; done > game.zip
+          mkdir gamezip
+          unzip -q game.zip -d gamezip
+          APK=$(find gamezip -iname '*.apk' | head -1)
+          if [ -z "$APK" ]; then
+            echo "ERROR: no hay ningun .apk dentro del zip"
+            exit 1
+          fi
+          mkdir -p proj/game
+          cp "$APK" proj/game/game.apk
+          ls -la proj/game
+          echo "libminecraftpe.so que trae tu APK:"
+          unzip -l proj/game/game.apk | grep libminecraftpe
+          unzip -p proj/game/game.apk lib/armeabi-v7a/libminecraftpe.so | sha256sum
+
+      - name: Herramientas de Android (SDK y NDK r29)
+        run: |
+          set -eux
+          export ANDROID_SDK_ROOT="$HOME/android-sdk"
+          export ANDROID_HOME="$HOME/android-sdk"
+          sh proj/tools/setup_toolchain.sh
+          yes | "$HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$HOME/android-sdk" --licenses > /dev/null || true
+
+      - name: Sysroot arm32 (descarga grande, tarda)
+        run: |
+          set -eux
+          cd proj/upstream/ZettaBridge
+          sh tools/extract_sysroot.sh
+          rm -rf .cache/gsi
+
+      - name: Comprobar compiladores del NDK
+        run: |
+          set -eux
+          NDKDIR="$HOME/android-sdk/ndk/29.0.14206865"
+          TC="$NDKDIR/toolchains/llvm/prebuilt/linux-x86_64"
+          ls "$NDKDIR" | head -30
+          ls "$TC/bin" | grep -E 'armv7a|^clang' | head -40 || true
+          file "$TC/bin/clang" || true
+          ldd "$(readlink -f "$TC/bin/clang")" | head -20 || true
+          if ! "$TC/bin/armv7a-linux-androideabi21-clang" --version > /dev/null 2>&1; then
+            echo "El compilador armv7a no funciona; creo los envoltorios a mano"
+            printf '#!/bin/sh\nexec "$(dirname "$0")/clang" --target=armv7a-linux-androideabi21 "$@"\n' > "$TC/bin/armv7a-linux-androideabi21-clang"
+            printf '#!/bin/sh\nexec "$(dirname "$0")/clang++" --target=armv7a-linux-androideabi21 "$@"\n' > "$TC/bin/armv7a-linux-androideabi21-clang++"
+            chmod +x "$TC/bin/armv7a-linux-androideabi21-clang" "$TC/bin/armv7a-linux-androideabi21-clang++"
+          fi
+          "$TC/bin/armv7a-linux-androideabi21-clang" --version
+
+      - name: Compilar
+        run: |
+          set -eux
+          export SDK="$HOME/android-sdk"
+          export ANDROID_HOME="$SDK"
+          export ANDROID_SDK_ROOT="$SDK"
+          export NDK="$SDK/ndk/29.0.14206865"
+          export NDK_HOST=linux-x86_64
+          ROOT="$GITHUB_WORKSPACE/proj"
+          ZB="$ROOT/upstream/ZettaBridge"
+          BT="$SDK/build-tools/35.0.0"
+          GAME_APK="$ROOT/game/game.apk"
+          INPUTS="$ROOT/build/app-inputs"
+          RESULT="$GITHUB_WORKSPACE/result"
+          mkdir -p "$RESULT"
+
+          echo "=== Boost"
+          mkdir -p "$ROOT/.deps/boost-headers"
+          cp -r /usr/include/boost "$ROOT/.deps/boost-headers/"
+
+          echo "=== clave de firma"
+          sh "$ROOT/tools/make_signing_key.sh"
+
+          echo "=== guest (arm32)"
+          (cd "$ZB" && sh tools/build_guest.sh > /dev/null)
+
+          echo "=== core arm64"
+          cmake -S "$ZB" -B "$ZB/build/android-arm64" -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-29 -DCMAKE_BUILD_TYPE=Release \
+            -DZB_BUILD_TESTS=OFF -DBoost_INCLUDE_DIR="$ROOT/.deps/boost-headers"
+          ninja -C "$ZB/build/android-arm64" zbridge zbproxy
+
+          echo "=== bundle de ejecucion"
+          (cd "$ZB" && sh tools/make_launcher_bundle.sh)
+
+          echo "=== entradas de la app"
+          rm -rf "$INPUTS"
+          mkdir -p "$INPUTS/assets/game"
+          cp -R "$ZB/build/launcher/assets/." "$INPUTS/assets/"
+          cp -R "$ZB/build/launcher/jniLibs" "$INPUTS/jniLibs"
+          cp "$GAME_APK" "$INPUTS/assets/game/base.apk"
+          GAME_SHA=$(sha256sum "$GAME_APK" | cut -d' ' -f1)
+          GAME_PACKAGE=$("$BT/aapt2" dump packagename "$GAME_APK")
+          GAME_VERSION=$("$BT/aapt2" dump badging "$GAME_APK" | sed -n "s/^package:.* versionName='\([^']*\)'.*/\1/p")
+          [ -n "$GAME_VERSION" ] || GAME_VERSION="0.15.10"
+          printf 'package=%s\nsha256=%s\nversionName=%s\n' "$GAME_PACKAGE" "$GAME_SHA" "$GAME_VERSION" \
+            > "$INPUTS/assets/game/info.properties"
+          cat "$INPUTS/assets/game/info.properties"
+          for density in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+            mkdir -p "$INPUTS/res/mipmap-$density"
+            unzip -p "$GAME_APK" "res/drawable-$density-v4/icon.png" > "$INPUTS/res/mipmap-$density/ic_launcher.png"
+          done
+
+          echo "=== nombre de la app"
+          sed -i 's|<string name="app_name">Minecraft PE</string>|<string name="app_name">Minecraft PE 0.15 (64 bits)</string>|' \
+            "$ROOT/android/app/src/main/res/values/strings.xml"
+
+          echo "=== gradle assembleRelease"
+          (cd "$ROOT/android" && gradle --no-daemon assembleRelease)
+          BUILT="$ROOT/android/app/build/outputs/apk/release/app-release.apk"
+
+          echo "=== comprobaciones"
+          "$BT/zipalign" -c -P 16 4 "$BUILT" && echo "zipalign OK"
+          "$BT/apksigner" verify --print-certs "$BUILT" | head -3
+          "$BT/aapt2" dump badging "$BUILT" | grep -E "^package|native-code|launchable-activity|sdkVersion|targetSdkVersion"
+
+          cp "$BUILT" "$RESULT/MinecraftPE-0.15-arm64.apk"
+          sha256sum "$RESULT/MinecraftPE-0.15-arm64.apk"
+          ls -la "$RESULT"
+
+      - name: Verificar que la libminecraftpe.so es la de tu APK (sin cambios)
+        run: |
+          set -eu
+          cd "$GITHUB_WORKSPACE"
+          EXPECTED=$(unzip -p proj/game/game.apk lib/armeabi-v7a/libminecraftpe.so | sha256sum | cut -d' ' -f1)
+          mkdir -p verify
+          unzip -p result/MinecraftPE-0.15-arm64.apk assets/game/base.apk > verify/base.apk
+          GOT=$(unzip -p verify/base.apk lib/armeabi-v7a/libminecraftpe.so | sha256sum | cut -d' ' -f1)
+          echo "libminecraftpe.so de tu APK:        $EXPECTED"
+          echo "libminecraftpe.so dentro de la app: $GOT"
+          if [ "$EXPECTED" != "$GOT" ]; then
+            echo "ERROR: la libreria dentro de la app no es la de tu APK"
+            exit 1
+          fi
+          echo "OK: la app lleva exactamente la libreria de tu APK"
+
+      - name: Subir el APK compilado
+        uses: actions/upload-artifact@v4
+        with:
+          name: MinecraftPE-0.15-arm64
+          path: result/MinecraftPE-0.15-arm64.apk
+          if-no-files-found: error
